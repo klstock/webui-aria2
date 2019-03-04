@@ -1,8 +1,9 @@
 var http = require("http"),
   url = require("url"),
   path = require("path"),
-  fs = require("fs");
-
+  fs = require("fs"),
+  request = require("request");
+const HLSDownloader = require("hlsdownloader").downloader;
 const Aria2 = require("aria2");
 const aria2 = new Aria2([
   {
@@ -19,46 +20,77 @@ async function downloadM3U8(param, response) {
   var m3u8_url = param.file_url ? param.file_url : "";
   var notify_url = param.notify_url ? param.notify_url : "";
   var tmp_path = param.tmp_path ? param.tmp_path : "";
-  var filename = param.file_name ? param.file_name : "";
-  var m3u8Pathname = tmp_path + "/" + filename;
-  var guid = "";
+  var stream_id = param.stream_id ? param.stream_id : "";
+
   try {
+    const params = {
+      playlistURL: m3u8_url, // change it
+      destination: tmp_path // change it (optional field)
+    };
+    const downloader = new HLSDownloader(params);
+    downloader.startDownload((err, msg) => {
+      console.log(msg, "m3u8");
+      if (msg.errors == undefined) {
+        setCallBack(notify_url, {
+          fileDir: tmp_path,
+          stream_id: stream_id
+        });
+      } else {
+        errors.forEach(i => {
+          downloadApi(urls, tmp_path, notify_url, stream_id);
+        });
+      }
+    });
   } catch (err) {
     response.writeHead(200, { "Content-Type": "application/json" });
     response.write(JSON.stringify({ code: 500, err: err }));
     response.end();
   }
+
+  response.writeHead(200, { "Content-Type": "application/json" });
+  response.write(JSON.stringify({ code: 200, msg: "success" }));
+  response.end();
+}
+
+async function downloadApi(urls, tmp_path, notify_url, stream_id) {
+  guid = await aria2.call("addUri", urls, { dir: tmp_path });
+  var args = {
+    timer: null,
+    notify_url: notify_url,
+    guid: guid,
+    stream_id: stream_id,
+    tmp_path: tmp_path
+  };
+  if (guid) {
+    args.timer = setInterval(
+      (function(args) {
+        return async function() {
+          var obj = await aria2.call("tellStatus", args.guid);
+          //任务完成
+          if (obj.status == "complete") {
+            clearInterval(args.timer);
+            setCallBack(notify_url, {
+              fileDir: args.tmp_path,
+              stream_id: stream_id
+            });
+          }
+        };
+      })(args),
+      5000
+    );
+  }
+
+  return guid;
 }
 
 async function downloadMp4(param, response) {
   var mp4_url = param.file_url ? param.file_url : "";
   var notify_url = param.notify_url ? param.notify_url : "";
   var tmp_path = param.tmp_path ? param.tmp_path : "";
-  var filename = param.file_name ? param.file_name : "";
-  var pathname = tmp_path + "/" + filename;
-
+  var stream_id = param.stream_id ? param.stream_id : "";
   var guid = "";
   try {
-    guid = await aria2.call("addUri", [mp4_url], { dir: tmp_path });
-    var args = {
-      timer: null,
-      notify_url: notify_url,
-      guid: guid
-    };
-    if (guid) {
-      args.timer = setInterval(
-        (function(args) {
-          return async function() {
-            var obj = await aria2.call("tellStatus", args.guid);
-            //任务完成
-            if (obj.status == "complete") {
-              clearInterval(args.timer);
-            }
-          };
-        })(args),
-        5000
-      );
-    }
+    guid = downloadApi([mp4_url], tmp_path, notify_url, stream_id);
   } catch (err) {
     response.writeHead(200, { "Content-Type": "application/json" });
     response.write(JSON.stringify({ code: 500, err: err }));
@@ -67,8 +99,20 @@ async function downloadMp4(param, response) {
   // 添加 定时器  定期检查 任务id 是否下载完成
   // 任务完成 通知 notify_url 附带必要参数
   response.writeHead(200, { "Content-Type": "application/json" });
-  response.write(JSON.stringify({ code: 0, tast_id: guid }));
+  response.write(JSON.stringify({ code: 200, tast_id: guid }));
   response.end();
+}
+
+async function setCallBack(url, params) {
+  var options = {
+    url: url, //req.query
+    form: params //req.body
+  };
+
+  request.post(options, function(error, response, body) {
+    console.info("statusCode:" + response.statusCode);
+    console.info("body: " + body);
+  });
 }
 
 http
