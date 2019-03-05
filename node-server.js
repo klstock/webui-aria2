@@ -36,8 +36,8 @@ async function downloadM3U8(param, response) {
           stream_id: stream_id
         });
       } else {
-        errors.forEach(i => {
-          downloadApi(urls, tmp_path, notify_url, stream_id);
+        msg.errors.forEach(i => {
+          downloadApi(i, tmp_path, notify_url, stream_id);
         });
       }
     });
