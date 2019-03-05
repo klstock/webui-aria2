@@ -23,7 +23,7 @@ const aria2 = new Aria2Api([
   {
     host: config.aria2_host || "localhost",
     port: config.aria2_port || 6800,
-    secure: onfig.aria2_secure || false,
+    secure: config.aria2_secure || false,
     secret: config.aria2_secret || "",
     path: config.aria2_path || "/jsonrpc"
   }
@@ -98,6 +98,51 @@ function returnApiError(pathname, response, err) {
   return response.end();
 }
 
+function aria2DownloadUrls(urls, success, failure) {
+  if (urls.length == 0) {
+    typeof success == "function" && success(urls);
+    return;
+  }
+  _log.WriteLog("aria2DownloadUrls", JSON.stringify(urls));
+
+  Promise.all(
+    urls.map(url => {
+      return new Promise((resolve, reject) => {
+        guid = aria2
+          .call("addUri", [url], {
+            dir: tmp_path
+          })
+          .then(guid => {
+            if (!guid) {
+              reject(url);
+            }
+            _log.WriteLog("aria2DownloadUrls addUri", url, guid);
+
+            timer = setInterval(async function() {
+              var obj = await aria2.call("tellStatus", guid);
+              if (obj.status == "complete") {
+                _log.WriteLog("aria2DownloadUrls complete", url, guid);
+                timer && clearInterval(timer);
+                resolve(url);
+              }
+            }, 5000);
+          })
+          .catch(err => {
+            reject(url);
+          });
+      });
+    })
+  )
+    .then(urls => {
+      _log.WriteLog("downloadMp4 success", JSON.stringify(urls));
+      typeof success == "function" && success(urls);
+    })
+    .catch(urls => {
+      _log.WriteLog("downloadMp4 failure", JSON.stringify(urls));
+      typeof failure == "function" && failure(urls);
+    });
+}
+
 async function downloadM3U8(pathname, params, response) {
   var m3u8_url = params.file_url || "";
   var notify_url = params.notify_url || "";
@@ -110,15 +155,28 @@ async function downloadM3U8(pathname, params, response) {
       destination: tmp_path
     });
     downloader.startDownload((err, msg) => {
-      console.log(msg, "m3u8");
-      if (msg.errors == undefined) {
+      if (err) {
+        _log.WriteLog(
+          "M3u8DownErr",
+          m3u8_url,
+          error.name + ": " + error.message,
+          JSON.stringify(msg)
+        );
+      } else {
+        _log.WriteLog("M3u8DownSuc", m3u8_url, JSON.stringify(msg));
+      }
+
+      if (msg.errors && msg.errors.length) {
+        aria2DownloadUrls(msg.errors, () => {
+          sendCallBack(notify_url, {
+            fileDir: tmp_path,
+            stream_id: stream_id
+          });
+        });
+      } else {
         sendCallBack(notify_url, {
           fileDir: tmp_path,
           stream_id: stream_id
-        });
-      } else {
-        msg.errors.forEach(i => {
-          downloadApi(i, tmp_path, notify_url, stream_id);
         });
       }
     });
@@ -147,10 +205,12 @@ async function downloadMp4(pathname, params, response) {
         message: "empty guid with aria2"
       });
     }
+    _log.WriteLog("downloadMp4 addUri", mp4_url, guid);
+
     timer = setInterval(async function() {
       var obj = await aria2.call("tellStatus", guid);
       if (obj.status == "complete") {
-        //任务完成
+        _log.WriteLog("downloadMp4 complete", mp4_url, guid);
         timer && clearInterval(timer);
         sendCallBack(notify_url, {
           fileDir: tmp_path,
@@ -237,4 +297,6 @@ http
   })
   .listen(config.srv_port);
 
-console.log("WebUI Aria2 Server is running on http://localhost:" + config.srv_port);
+console.log(
+  "WebUI Aria2 Server is running on http://localhost:" + config.srv_port
+);
