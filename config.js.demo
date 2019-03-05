@@ -1,0 +1,9 @@
+﻿var config = {
+    aria2_host: '127.0.0.1',
+    aria2_port: 6800,
+    aria2_secret: '',
+    srv_port: 8888,
+    srv_api_key: ''
+};
+
+exports.configs = config;

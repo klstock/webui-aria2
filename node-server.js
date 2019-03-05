@@ -1,37 +1,118 @@
-var http = require("http"),
-  url = require("url"),
-  path = require("path"),
-  fs = require("fs"),
-  request = require("request");
+const http = require("http");
+const url = require("url");
+const path = require("path");
+const fs = require("fs");
+const request = require("request");
+
 const HLSDownloader = require("hlsdownloader").downloader;
-const Aria2 = require("aria2");
-const aria2 = new Aria2([
+const Aria2Api = require("aria2");
+
+const filelog = require("./filelog");
+
+var _CONFIG = null;
+if (process.argv.length > 2) {
+  _CONFIG = require("./" + process.argv[2]);
+} else {
+  _CONFIG = require("./config");
+}
+
+const config = _CONFIG.configs || {};
+const _log = filelog.NewLog("DownloadSrv");
+
+const aria2 = new Aria2Api([
   {
-    host: "localhost",
-    port: 6800,
-    secure: false,
-    secret: "",
-    path: "/jsonrpc"
+    host: config.aria2_host || "localhost",
+    port: config.aria2_port || 6800,
+    secure: onfig.aria2_secure || false,
+    secret: config.aria2_secret || "",
+    path: config.aria2_path || "/jsonrpc"
   }
 ]);
-port = process.argv[2] || 8888;
 
-async function downloadM3U8(param, response) {
-  var m3u8_url = param.file_url ? param.file_url : "";
-  var notify_url = param.notify_url ? param.notify_url : "";
-  var tmp_path = param.tmp_path ? param.tmp_path : "";
-  var stream_id = param.stream_id ? param.stream_id : "";
+function checkRequestApiKey(params) {
+  var api_key = params.api_key || "";
+  return !config.srv_api_key || config.srv_api_key == api_key;
+}
+
+function sendCallBack(url, params) {
+  var options = {
+    url: url,
+    form: params
+  };
+
+  request.post(options, function(error, response, body) {
+    if (error) {
+      _log.WriteLog(
+        "CallBackError",
+        "url:" + url,
+        "statusCode:" + response.statusCode,
+        error.name + ": " + error.message
+      );
+    } else {
+      _log.WriteLog(
+        "CallBackSuccess",
+        "url:" + url,
+        "statusCode:" + response.statusCode,
+        "body: " + body
+      );
+    }
+    console.info("url:" + url);
+    console.info("statusCode:" + response.statusCode);
+    console.info("body: " + body);
+  });
+}
+
+function returnApiSuccess(pathname, response, msg, data) {
+  msg = msg || "success";
+  data = data || {};
+
+  response.writeHead(200, {
+    "Content-Type": "application/json"
+  });
+  response.write(
+    JSON.stringify({
+      code: 0,
+      msg: "success",
+      data: data
+    })
+  );
+  _log.WriteLog("ApiSuccess", pathname, JSON.stringify(data));
+  return response.end();
+}
+
+function returnApiError(pathname, response, err) {
+  response.writeHead(200, {
+    "Content-Type": "application/json"
+  });
+  response.write(
+    JSON.stringify({
+      code: 500,
+      msg: err.message,
+      err: {
+        name: err.name,
+        message: err.message
+      }
+    })
+  );
+  _log.WriteLog("ApiError", pathname, err.name, err.message);
+  return response.end();
+}
+
+async function downloadM3U8(pathname, params, response) {
+  var m3u8_url = params.file_url || "";
+  var notify_url = params.notify_url || "";
+  var tmp_path = params.tmp_path || "";
+  var stream_id = params.stream_id || "";
 
   try {
-    const params = {
-      playlistURL: m3u8_url, // change it
-      destination: tmp_path // change it (optional field)
-    };
-    const downloader = new HLSDownloader(params);
+    const downloader = new HLSDownloader({
+      playlistURL: m3u8_url,
+      destination: tmp_path
+    });
     downloader.startDownload((err, msg) => {
       console.log(msg, "m3u8");
       if (msg.errors == undefined) {
-        setCallBack(notify_url, {
+        sendCallBack(notify_url, {
           fileDir: tmp_path,
           stream_id: stream_id
         });
@@ -42,76 +123,47 @@ async function downloadM3U8(param, response) {
       }
     });
   } catch (err) {
-    response.writeHead(200, { "Content-Type": "application/json" });
-    response.write(JSON.stringify({ code: 500, err: err }));
-    response.end();
+    return returnApiError(pathname, response, err);
   }
 
-  response.writeHead(200, { "Content-Type": "application/json" });
-  response.write(JSON.stringify({ code: 200, msg: "success" }));
-  response.end();
+  return returnApiSuccess(pathname, response);
 }
 
-async function downloadApi(urls, tmp_path, notify_url, stream_id) {
-  guid = await aria2.call("addUri", urls, { dir: tmp_path });
-  var args = {
-    timer: null,
-    notify_url: notify_url,
-    guid: guid,
-    stream_id: stream_id,
-    tmp_path: tmp_path
-  };
-  if (guid) {
-    args.timer = setInterval(
-      (function(args) {
-        return async function() {
-          var obj = await aria2.call("tellStatus", args.guid);
-          //任务完成
-          if (obj.status == "complete") {
-            clearInterval(args.timer);
-            setCallBack(notify_url, {
-              fileDir: args.tmp_path,
-              stream_id: stream_id
-            });
-          }
-        };
-      })(args),
-      5000
-    );
-  }
-
-  return guid;
-}
-
-async function downloadMp4(param, response) {
-  var mp4_url = param.file_url ? param.file_url : "";
-  var notify_url = param.notify_url ? param.notify_url : "";
-  var tmp_path = param.tmp_path ? param.tmp_path : "";
-  var stream_id = param.stream_id ? param.stream_id : "";
+async function downloadMp4(pathname, params, response) {
+  var mp4_url = params.file_url || "";
+  var notify_url = params.notify_url || "";
+  var tmp_path = params.tmp_path || "";
+  var stream_id = params.stream_id || "";
   var guid = "";
+  var timer = null;
+
   try {
-    guid = downloadApi([mp4_url], tmp_path, notify_url, stream_id);
+    guid = await aria2.call("addUri", [mp4_url], {
+      dir: tmp_path
+    });
+    if (!guid) {
+      return returnApiError(pathname, response, {
+        name: "EmptyGuid",
+        message: "empty guid with aria2"
+      });
+    }
+    timer = setInterval(async function() {
+      var obj = await aria2.call("tellStatus", guid);
+      if (obj.status == "complete") {
+        //任务完成
+        timer && clearInterval(timer);
+        sendCallBack(notify_url, {
+          fileDir: tmp_path,
+          stream_id: stream_id
+        });
+      }
+    }, 5000);
   } catch (err) {
-    response.writeHead(200, { "Content-Type": "application/json" });
-    response.write(JSON.stringify({ code: 500, err: err }));
-    response.end();
+    return returnApiError(pathname, response, err);
   }
-  // 添加 定时器  定期检查 任务id 是否下载完成
-  // 任务完成 通知 notify_url 附带必要参数
-  response.writeHead(200, { "Content-Type": "application/json" });
-  response.write(JSON.stringify({ code: 200, tast_id: guid }));
-  response.end();
-}
 
-async function setCallBack(url, params) {
-  var options = {
-    url: url, //req.query
-    form: params //req.body
-  };
-
-  request.post(options, function(error, response, body) {
-    console.info("statusCode:" + response.statusCode);
-    console.info("body: " + body);
+  return returnApiSuccess(pathname, response, "add success", {
+    guid: guid
   });
 }
 
@@ -120,13 +172,20 @@ http
     var req = url.parse(request.url),
       pathname = req.pathname,
       filename = path.join(process.cwd(), "docs", pathname),
-      param = url.parse(decodeURI(request.url), true).query;
+      params = url.parse(decodeURI(request.url), true).query;
+
+    if (pathname.substr(0, 5) == "/api/" && !checkRequestApiKey(params)) {
+      return returnApiError(pathname, response, {
+        name: "ErrorApiKey",
+        message: "error api key"
+      });
+    }
 
     if (pathname == "/api/downloadM3U8") {
-      downloadM3U8(param, response);
+      downloadM3U8(pathname, params, response);
       return;
     } else if (pathname == "/api/downloadMp4") {
-      downloadMp4(param, response);
+      downloadMp4(pathname, params, response);
       return;
     }
 
@@ -149,7 +208,9 @@ http
 
     fs.exists(filename, function(exists) {
       if (!exists) {
-        response.writeHead(404, { "Content-Type": "text/plain" });
+        response.writeHead(404, {
+          "Content-Type": "text/plain"
+        });
         response.write("404 Not Found\n");
         response.end();
         return;
@@ -159,17 +220,21 @@ http
 
       fs.readFile(filename, "binary", function(err, file) {
         if (err) {
-          response.writeHead(500, { "Content-Type": "text/plain" });
+          response.writeHead(500, {
+            "Content-Type": "text/plain"
+          });
           response.write(err + "\n");
           response.end();
           return;
         }
-        response.writeHead(200, { "Content-Type": contentType });
+        response.writeHead(200, {
+          "Content-Type": contentType
+        });
         response.write(file, "binary");
         response.end();
       });
     });
   })
-  .listen(parseInt(port, 10));
+  .listen(config.srv_port);
 
-console.log("WebUI Aria2 Server is running on http://localhost:" + port);
+console.log("WebUI Aria2 Server is running on http://localhost:" + config.srv_port);
