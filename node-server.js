@@ -4,8 +4,9 @@ const path = require("path");
 const fs = require("fs");
 const request = require("request");
 
-const HLSDownloader = require("hlsdownloader").downloader;
+const HLSDownloader = require("./hlsdownloader").downloader;
 const Aria2Api = require("aria2");
+const PromisePool = require("es6-promise-pool");
 
 const filelog = require("./filelog");
 
@@ -34,37 +35,68 @@ function checkRequestApiKey(params) {
   return !config.srv_api_key || config.srv_api_key == api_key;
 }
 
-function sendCallBack(url, params) {
+function sendCallBack(url, params, idx) {
+  idx = idx || 0;
+
   var options = {
     url: url,
     form: params
   };
 
-  request.post(options, function(error, response, body) {
-    if (error) {
+  request.post(options, function(error, resp, body) {
+    if (error || resp.statusCode != 200) {
+      config.debug &&
+        console.log(
+          `CallBackError[${idx}]`,
+          "url:" + url,
+          "statusCode:" + resp.statusCode,
+          error ? error.name + ": " + error.message : resp.statusCode
+        );
       _log.WriteLog(
-        "CallBackError",
+        `CallBackError[${idx}]`,
         "url:" + url,
-        "statusCode:" + response.statusCode,
-        error.name + ": " + error.message
+        "statusCode:" + resp.statusCode,
+        error ? error.name + ": " + error.message : resp.statusCode
       );
+      idx < 10 &&
+        setTimeout(function() {
+          sendCallBack(url, params, idx + 1);
+        }, 60 * 1000);
     } else {
+      config.debug &&
+        console.log(
+          `CallBackSuccess[${idx}]`,
+          "url:" + url,
+          "statusCode:" + resp.statusCode,
+          "body: " + body
+        );
       _log.WriteLog(
-        "CallBackSuccess",
+        `CallBackSuccess[${idx}]`,
         "url:" + url,
-        "statusCode:" + response.statusCode,
+        "statusCode:" + resp.statusCode,
         "body: " + body
       );
     }
-    console.info("url:" + url);
-    console.info("statusCode:" + response.statusCode);
-    console.info("body: " + body);
+    console.info(
+      "url:" + url,
+      "statusCode:" + resp.statusCode,
+      "body: " + body
+    );
   });
 }
 
-function returnApiSuccess(pathname, response, msg, data) {
+function returnApiSuccess(pathname, params, response, msg, data) {
   msg = msg || "success";
   data = data || {};
+  if (!response) {
+    console.info(
+      "ApiSuccess",
+      pathname,
+      JSON.stringify(params),
+      JSON.stringify(data)
+    );
+    return;
+  }
 
   response.writeHead(200, {
     "Content-Type": "application/json"
@@ -76,11 +108,27 @@ function returnApiSuccess(pathname, response, msg, data) {
       data: data
     })
   );
-  _log.WriteLog("ApiSuccess", pathname, JSON.stringify(data));
+  _log.WriteLog(
+    "ApiSuccess",
+    pathname,
+    JSON.stringify(params),
+    JSON.stringify(data)
+  );
   return response.end();
 }
 
-function returnApiError(pathname, response, err) {
+function returnApiError(pathname, params, response, err) {
+  if (!response) {
+    console.error(
+      "ApiError",
+      pathname,
+      JSON.stringify(params),
+      err.name,
+      err.message
+    );
+    return;
+  }
+
   response.writeHead(200, {
     "Content-Type": "application/json"
   });
@@ -94,68 +142,107 @@ function returnApiError(pathname, response, err) {
       }
     })
   );
-  _log.WriteLog("ApiError", pathname, err.name, err.message);
+  _log.WriteLog(
+    "ApiError",
+    pathname,
+    JSON.stringify(params),
+    err.name,
+    err.message
+  );
   return response.end();
 }
 
-function aria2DownloadUrls(urls, tmp_path, success, failure) {
+function aria2DownloadUrls(urls, tmp_path, success) {
   if (urls.length == 0) {
     typeof success == "function" && success(urls);
     return;
   }
+  var urls_ = JSON.parse(JSON.stringify(urls));
+
   _log.WriteLog("aria2DownloadUrls", JSON.stringify(urls));
 
-  Promise.all(
-    urls.map(url => {
-      return new Promise((resolve, reject) => {
-        guid = aria2
-          .call("addUri", [url], {
-            dir: tmp_path
-          })
-          .then(guid => {
-            if (!guid) {
-              reject(url);
-            }
-            _log.WriteLog("aria2DownloadUrls addUri", url, guid);
-
-            timer = setInterval(async function() {
-              var obj = await aria2.call("tellStatus", guid);
-              if (obj.status == "complete") {
-                _log.WriteLog("aria2DownloadUrls complete", url, guid);
-                timer && clearInterval(timer);
-                resolve(url);
-              }
-            }, 5000);
-          })
-          .catch(err => {
+  var delayValue = function(url) {
+    var timer = null;
+    return new Promise((resolve, reject) => {
+      aria2
+        .call("addUri", [url], {
+          dir: tmp_path
+        })
+        .then(guid => {
+          if (!guid) {
             reject(url);
-          });
-      });
-    })
-  )
-    .then(urls => {
-      _log.WriteLog("downloadMp4 success", JSON.stringify(urls));
-      typeof success == "function" && success(urls);
-    })
-    .catch(urls => {
-      _log.WriteLog("downloadMp4 failure", JSON.stringify(urls));
-      typeof failure == "function" && failure(urls);
+          }
+          config.debug && console.log("aria2 addUri", guid, url, tmp_path);
+          _log.WriteLog("aria2DownloadUrls addUri", url, guid);
+
+          timer = setInterval(function() {
+            aria2.call("tellStatus", guid).then(function(obj) {
+              if (obj.status == "complete") {
+                config.debug &&
+                  console.log("aria2 complete", guid, url, tmp_path);
+                timer && clearInterval(timer);
+                resolve(guid);
+              }
+            });
+          }, 5000);
+        })
+        .catch(err => {
+          reject(err);
+        });
     });
+  };
+
+  var promiseProducer = function() {
+    while (urls_.length) {
+      var url = urls_.pop();
+      if (url) {
+        return delayValue(url);
+      }
+    }
+    return null;
+  };
+
+  var pool = new PromisePool(promiseProducer, 5);
+
+  pool.addEventListener("rejected", function(event) {
+    // The event contains:
+    // - target:    the PromisePool itself
+    // - data:
+    //   - promise: the Promise that got rejected
+    //   - error:   the Error for the rejection
+    console.error("Rejected: " + event.data.error);
+    _log.WriteLog(
+      "aria2DownloadUrls rejected",
+      JSON.stringify(event.data.error)
+    );
+  });
+
+  pool.start().then(function() {
+    console.info("aria2DownloadUrls success", JSON.stringify(urls_));
+    _log.WriteLog("aria2DownloadUrls success", JSON.stringify(urls_));
+    typeof success == "function" && success(urls_);
+  });
 }
 
-async function downloadM3U8(pathname, params, response) {
+function downloadM3U8(pathname, params, response) {
   var m3u8_url = params.file_url || "";
   var notify_url = params.notify_url || "";
   var tmp_path = params.tmp_path || "";
   var stream_id = params.stream_id || "";
 
   try {
-    const downloader = new HLSDownloader({
+    new HLSDownloader({
       playlistURL: m3u8_url,
       destination: tmp_path
-    });
-    downloader.startDownload((err, msg) => {
+    }).startGetM3u8List((err, msg) => {
       if (err) {
+        console.error(
+          "M3u8DownErr",
+          m3u8_url,
+          tmp_path,
+          error.name + ": " + error.message,
+          JSON.stringify(msg)
+        );
         _log.WriteLog(
           "M3u8DownErr",
           m3u8_url,
@@ -164,79 +251,56 @@ async function downloadM3U8(pathname, params, response) {
           JSON.stringify(msg)
         );
       } else {
+        console.info("M3u8DownSuc", m3u8_url, tmp_path, JSON.stringify(msg));
         _log.WriteLog("M3u8DownSuc", m3u8_url, tmp_path, JSON.stringify(msg));
       }
 
-      if (msg.errors && msg.errors.length > 0) {
-        aria2DownloadUrls(msg.errors, tmp_path, () => {
+      // 使用 error 传递所有 ts 列表
+      msg.errors &&
+        msg.errors.length > 0 &&
+        aria2DownloadUrls(msg.errors, tmp_path, function() {
           sendCallBack(notify_url, {
             fileDir: tmp_path,
             stream_id: stream_id
           });
         });
-      } else {
-        sendCallBack(notify_url, {
-          fileDir: tmp_path,
-          stream_id: stream_id
-        });
-      }
     });
   } catch (err) {
-    return returnApiError(pathname, response, err);
+    return returnApiError(pathname, params, response, err);
   }
 
-  return returnApiSuccess(pathname, response);
+  return returnApiSuccess(pathname, params, response);
 }
 
-async function downloadMp4(pathname, params, response) {
+function downloadMp4(pathname, params, response) {
   var mp4_url = params.file_url || "";
   var notify_url = params.notify_url || "";
   var tmp_path = params.tmp_path || "";
   var stream_id = params.stream_id || "";
-  var guid = "";
-  var timer = null;
 
   try {
-    guid = await aria2.call("addUri", [mp4_url], {
-      dir: tmp_path
-    });
-    if (!guid) {
-      return returnApiError(pathname, response, {
-        name: "EmptyGuid",
-        message: "empty guid with aria2"
+    aria2DownloadUrls([mp4_url], tmp_path, () => {
+      sendCallBack(notify_url, {
+        fileDir: tmp_path,
+        stream_id: stream_id
       });
-    }
-    _log.WriteLog("downloadMp4 addUri", mp4_url, guid);
-
-    timer = setInterval(async function() {
-      var obj = await aria2.call("tellStatus", guid);
-      if (obj.status == "complete") {
-        _log.WriteLog("downloadMp4 complete", mp4_url, guid);
-        timer && clearInterval(timer);
-        sendCallBack(notify_url, {
-          fileDir: tmp_path,
-          stream_id: stream_id
-        });
-      }
-    }, 5000);
+    });
   } catch (err) {
-    return returnApiError(pathname, response, err);
+    return returnApiError(pathname, params, response, err);
   }
 
-  return returnApiSuccess(pathname, response, "add success", {
-    guid: guid
-  });
+  return returnApiSuccess(pathname, params, response, "add success");
 }
 
 http
-  .createServer(async function(request, response) {
+  .createServer(function(request, response) {
     var req = url.parse(request.url),
       pathname = req.pathname,
       filename = path.join(process.cwd(), "docs", pathname),
       params = url.parse(decodeURI(request.url), true).query;
 
     if (pathname.substr(0, 5) == "/api/" && !checkRequestApiKey(params)) {
-      return returnApiError(pathname, response, {
+      return returnApiError(pathname, params, response, {
         name: "ErrorApiKey",
         message: "error api key"
       });

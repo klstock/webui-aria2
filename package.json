@@ -31,6 +31,7 @@
     "clean-webpack-plugin": "^0.1.19",
     "css-loader": "^1.0.0",
     "download-file": "^0.1.5",
+    "es6-promise-pool": "^2.5.0",
     "file-loader": "^2.0.0",
     "flag-icon-css": "^3.0.0",
     "hls-parser": "^0.3.0",
