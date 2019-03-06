@@ -98,7 +98,7 @@ function returnApiError(pathname, response, err) {
   return response.end();
 }
 
-function aria2DownloadUrls(urls, success, failure) {
+function aria2DownloadUrls(urls, tmp_path, success, failure) {
   if (urls.length == 0) {
     typeof success == "function" && success(urls);
     return;
@@ -159,15 +159,16 @@ async function downloadM3U8(pathname, params, response) {
         _log.WriteLog(
           "M3u8DownErr",
           m3u8_url,
+          tmp_path,
           error.name + ": " + error.message,
           JSON.stringify(msg)
         );
       } else {
-        _log.WriteLog("M3u8DownSuc", m3u8_url, JSON.stringify(msg));
+        _log.WriteLog("M3u8DownSuc", m3u8_url, tmp_path, JSON.stringify(msg));
       }
 
-      if (msg.errors && msg.errors.length) {
-        aria2DownloadUrls(msg.errors, () => {
+      if (msg.errors && msg.errors.length > 0) {
+        aria2DownloadUrls(msg.errors, tmp_path, () => {
           sendCallBack(notify_url, {
             fileDir: tmp_path,
             stream_id: stream_id
