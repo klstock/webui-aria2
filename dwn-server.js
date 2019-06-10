@@ -10,6 +10,20 @@ const PromisePool = require("es6-promise-pool");
 
 const filelog = require("./filelog");
 
+const pathJoin = path.join;
+
+function exists(path) {
+  return fs.existsSync(path);
+}
+
+function isFile(path) {
+  if (!exists(path)) {
+    return -1;
+  }
+  var stat = fs.statSync(path);
+  return stat.isFile() ? stat.size : -1;
+}
+
 var _CONFIG = null;
 if (process.argv.length > 2) {
   _CONFIG = require("./" + process.argv[2]);
@@ -164,6 +178,20 @@ function aria2DownloadUrls(urls, tmp_path, success) {
   var delayValue = function(url) {
     var timer = null;
     return new Promise((resolve, reject) => {
+      var arr = url.split("?")[0].split("/");
+      var filename = pathJoin(tmp_path, arr[arr.length - 1]);
+      var s = isFile(filename);
+      if (s > 0) {
+        config.debug && console.log("aria2 isFile", url, filename);
+        _log.WriteLog("aria2DownloadUrls isFile", url, filename);
+        resolve(filename);
+        return;
+      }
+
+      if (s == 0) {
+        fs.unlinkSync(filename);
+      }
+
       aria2
         .call("addUri", [url], {
           dir: tmp_path
@@ -218,9 +246,9 @@ function aria2DownloadUrls(urls, tmp_path, success) {
   });
 
   pool.start().then(function() {
-    console.info("aria2DownloadUrls success", JSON.stringify(urls_));
-    _log.WriteLog("aria2DownloadUrls success", JSON.stringify(urls_));
-    typeof success == "function" && success(urls_);
+    console.info("aria2DownloadUrls success", JSON.stringify(urls));
+    _log.WriteLog("aria2DownloadUrls success", JSON.stringify(urls));
+    typeof success == "function" && success(urls);
   });
 }
 
@@ -292,75 +320,75 @@ function downloadMp4(pathname, params, response) {
   return returnApiSuccess(pathname, params, response, "add success");
 }
 
-http
-  .createServer(function(request, response) {
-    var req = url.parse(request.url),
-      pathname = req.pathname,
-      filename = path.join(process.cwd(), "docs", pathname),
-      params = url.parse(decodeURI(request.url), true).query;
+var app = http.createServer(function(request, response) {
+  var req = url.parse(request.url),
+    pathname = req.pathname,
+    filename = path.join(process.cwd(), "docs", pathname),
+    params = url.parse(decodeURI(request.url), true).query;
 
-    if (pathname.substr(0, 5) == "/api/" && !checkRequestApiKey(params)) {
-      return returnApiError(pathname, params, response, {
-        name: "ErrorApiKey",
-        message: "error api key"
+  if (pathname.substr(0, 5) == "/api/" && !checkRequestApiKey(params)) {
+    return returnApiError(pathname, params, response, {
+      name: "ErrorApiKey",
+      message: "error api key"
+    });
+  }
+
+  if (pathname == "/api/downloadM3U8") {
+    downloadM3U8(pathname, params, response);
+    return;
+  } else if (pathname == "/api/downloadMp4") {
+    downloadMp4(pathname, params, response);
+    return;
+  }
+
+  var extname = path.extname(filename);
+  var contentType = "text/html";
+  switch (extname) {
+    case ".js":
+      contentType = "text/javascript";
+      break;
+    case ".css":
+      contentType = "text/css";
+      break;
+    case ".ico":
+      contentType = "image/x-icon";
+      break;
+    case ".svg":
+      contentType = "image/svg+xml";
+      break;
+  }
+
+  fs.exists(filename, function(exists) {
+    if (!exists) {
+      response.writeHead(404, {
+        "Content-Type": "text/plain"
       });
-    }
-
-    if (pathname == "/api/downloadM3U8") {
-      downloadM3U8(pathname, params, response);
-      return;
-    } else if (pathname == "/api/downloadMp4") {
-      downloadMp4(pathname, params, response);
+      response.write("404 Not Found\n");
+      response.end();
       return;
     }
 
-    var extname = path.extname(filename);
-    var contentType = "text/html";
-    switch (extname) {
-      case ".js":
-        contentType = "text/javascript";
-        break;
-      case ".css":
-        contentType = "text/css";
-        break;
-      case ".ico":
-        contentType = "image/x-icon";
-        break;
-      case ".svg":
-        contentType = "image/svg+xml";
-        break;
-    }
+    if (fs.statSync(filename).isDirectory()) filename += "/index.html";
 
-    fs.exists(filename, function(exists) {
-      if (!exists) {
-        response.writeHead(404, {
+    fs.readFile(filename, "binary", function(err, file) {
+      if (err) {
+        response.writeHead(500, {
           "Content-Type": "text/plain"
         });
-        response.write("404 Not Found\n");
+        response.write(err + "\n");
         response.end();
         return;
       }
-
-      if (fs.statSync(filename).isDirectory()) filename += "/index.html";
-
-      fs.readFile(filename, "binary", function(err, file) {
-        if (err) {
-          response.writeHead(500, {
-            "Content-Type": "text/plain"
-          });
-          response.write(err + "\n");
-          response.end();
-          return;
-        }
-        response.writeHead(200, {
-          "Content-Type": contentType
-        });
-        response.write(file, "binary");
-        response.end();
+      response.writeHead(200, {
+        "Content-Type": contentType
       });
+      response.write(file, "binary");
+      response.end();
     });
-  })
-  .listen(config.srv_port);
+  });
+});
+
+app.listen(config.srv_port);
 
 console.log(
   "WebUI Aria2 Server is running on http://localhost:" + config.srv_port
