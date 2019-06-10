@@ -285,14 +285,14 @@ function downloadM3U8(pathname, params, response) {
           "M3u8DownErr",
           m3u8_url,
           tmp_path,
-          error.name + ": " + error.message,
+          err.name + ": " + err.message,
           JSON.stringify(msg)
         );
         _log.WriteLog(
           "M3u8DownErr",
           m3u8_url,
           tmp_path,
-          error.name + ": " + error.message,
+          err.name + ": " + err.message,
           JSON.stringify(msg)
         );
       } else {
