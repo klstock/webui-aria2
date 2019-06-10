@@ -204,14 +204,31 @@ function aria2DownloadUrls(urls, tmp_path, success) {
           _log.WriteLog("aria2DownloadUrls addUri", url, guid);
 
           timer = setInterval(function() {
-            aria2.call("tellStatus", guid).then(function(obj) {
-              if (obj.status == "complete") {
-                config.debug &&
-                  console.log("aria2 complete", guid, url, tmp_path);
-                timer && clearInterval(timer);
-                resolve(guid);
-              }
-            });
+            aria2
+              .call("tellStatus", guid)
+              .then(function(obj) {
+                if (obj.status == "complete") {
+                  config.debug &&
+                    console.log("aria2 complete", guid, url, tmp_path);
+                  timer && clearInterval(timer);
+                  resolve(guid);
+                }
+              })
+              .catch(err => {
+                var s = isFile(filename);
+                if (s > 0) {
+                  config.debug &&
+                    console.log("aria2 isFile", guid, url, filename);
+                  _log.WriteLog(
+                    "aria2DownloadUrls isFile",
+                    guid,
+                    url,
+                    filename
+                  );
+                  timer && clearInterval(timer);
+                  resolve(filename);
+                }
+              });
           }, 5000);
         })
         .catch(err => {
