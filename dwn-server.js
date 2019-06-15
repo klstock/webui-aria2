@@ -16,12 +16,24 @@ function exists(path) {
   return fs.existsSync(path);
 }
 
-function isFile(path) {
-  if (!exists(path)) {
+function isFile(file_path) {
+  if (!exists(file_path)) {
     return -1;
   }
-  var stat = fs.statSync(path);
+  var stat = fs.statSync(file_path);
   return stat.isFile() ? stat.size : -1;
+}
+
+function mkdirs(tmp_path) {
+  if (isFile(tmp_path) >= 0) {
+    fs.unlinkSync(tmp_path);
+  }
+  var parent_path = path.dirname(dirpath);
+  if (parent_path && path.existsSync(parent_path)) {
+    mkdirs(parent_path);
+  }
+
+  fs.mkdirSync(tmp_path);
 }
 
 var _CONFIG = null;
@@ -211,7 +223,7 @@ function aria2DownloadUrls(urls, tmp_path, success) {
                   config.debug &&
                     console.log("aria2 complete", guid, url, tmp_path);
                   timer && clearInterval(timer);
-                  resolve(guid);
+                  resolve(obj.totalLength || 0);
                 }
               })
               .catch(err => {
@@ -226,7 +238,7 @@ function aria2DownloadUrls(urls, tmp_path, success) {
                     filename
                   );
                   timer && clearInterval(timer);
-                  resolve(filename);
+                  resolve(s);
                 }
               });
           }, 5000);
@@ -247,7 +259,7 @@ function aria2DownloadUrls(urls, tmp_path, success) {
     return null;
   };
 
-  var pool = new PromisePool(promiseProducer, 5);
+  var pool = new PromisePool(promiseProducer, 10);
 
   pool.addEventListener("rejected", function(event) {
     // The event contains:
@@ -263,7 +275,7 @@ function aria2DownloadUrls(urls, tmp_path, success) {
   });
 
   pool.start().then(function() {
-    console.info("aria2DownloadUrls success", JSON.stringify(urls));
+    console.info("aria2DownloadUrls success", urls.length);
     _log.WriteLog("aria2DownloadUrls success", JSON.stringify(urls));
     typeof success == "function" && success(urls);
   });
@@ -299,16 +311,18 @@ function downloadM3U8(pathname, params, response) {
         console.info("M3u8DownSuc", m3u8_url, tmp_path, JSON.stringify(msg));
         _log.WriteLog("M3u8DownSuc", m3u8_url, tmp_path, JSON.stringify(msg));
       }
-
-      // 使用 error 传递所有 ts 列表
-      msg.errors &&
-        msg.errors.length > 0 &&
-        aria2DownloadUrls(msg.errors, tmp_path, function() {
-          sendCallBack(notify_url, {
-            fileDir: tmp_path,
-            stream_id: stream_id
+      path.existsSync(tmp_path) && mkdirs(tmp_path);
+      setTimeout(function() {
+        // 使用 error 传递所有 ts 列表
+        msg.errors &&
+          msg.errors.length > 0 &&
+          aria2DownloadUrls(msg.errors, tmp_path, function() {
+            sendCallBack(notify_url, {
+              fileDir: tmp_path,
+              stream_id: stream_id
+            });
           });
-        });
+      }, 0);
     });
   } catch (err) {
     return returnApiError(pathname, params, response, err);
