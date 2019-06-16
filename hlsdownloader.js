@@ -83,6 +83,7 @@ class HLSDownloader {
    */
   constructor({
     playlistURL = "",
+    playlistFile = "",
     destination = null,
     method,
     uri,
@@ -107,6 +108,7 @@ class HLSDownloader {
       throw error;
     }
     this.playlistURL = playlistURL;
+    this.playlistFile = playlistFile;
     this.destination = destination;
     this.options = options;
     this.hostName = parse(playlistURL, true, true).hostname;
@@ -133,6 +135,39 @@ class HLSDownloader {
   }
 
   getM3u8list(callback) {
+    function exists(path) {
+      return fs.existsSync(path);
+    }
+
+    function isFile(file_path) {
+      if (!exists(file_path)) {
+        return -1;
+      }
+      var stat = fs.statSync(file_path);
+      return stat.isFile() ? stat.size : -1;
+    }
+
+    if (this.playlistFile && isFile(this.playlistFile) > 0) {
+      fs.readFile(this.playlistFile, (err, body) => {
+        body = body.toString("utf8");
+        if (err) {
+          const error = new Error("VariantReadFileError");
+          error.file = this.playlistFile;
+          error.err = err;
+          return callback(error);
+        }
+
+        if (!isValidPlaylist(body)) {
+          return callback(
+            new Error("This playlist isn't a valid m3u8 playlist")
+          );
+        }
+
+        this.items.push(this.playlistURL);
+        this.parseMasterM3u8Playlist(body, callback);
+      });
+      return;
+    }
     const options = {
       ...this.options,
       method: "GET",
@@ -153,7 +188,8 @@ class HLSDownloader {
         if (err) {
           const error = new Error("VariantDownloadError");
           error.statusCode = err.statusCode;
-          error.uri = err.options.uri;
+          error.uri = options.uri;
+          error.err = err;
           return callback(error);
         }
       });

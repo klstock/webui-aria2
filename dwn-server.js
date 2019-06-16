@@ -25,11 +25,17 @@ function isFile(file_path) {
 }
 
 function mkdirs(tmp_path) {
-  if (isFile(tmp_path) >= 0) {
-    fs.unlinkSync(tmp_path);
+  if (exists(tmp_path)) {
+    var stat = fs.statSync(tmp_path);
+    if (stat.isFile()) {
+      fs.unlinkSync(tmp_path);
+    } else if (stat.isDirectory()) {
+      return;
+    }
   }
-  var parent_path = path.dirname(dirpath);
-  if (parent_path && path.existsSync(parent_path)) {
+
+  var parent_path = path.dirname(tmp_path);
+  if (parent_path && fs.existsSync(parent_path)) {
     mkdirs(parent_path);
   }
 
@@ -283,6 +289,7 @@ function aria2DownloadUrls(urls, tmp_path, success) {
 
 function downloadM3U8(pathname, params, response) {
   var m3u8_url = params.file_url || "";
+  var m3u8_file = params.m3u8_file || "";
   var notify_url = params.notify_url || "";
   var tmp_path = params.tmp_path || "";
   var stream_id = params.stream_id || "";
@@ -290,6 +297,7 @@ function downloadM3U8(pathname, params, response) {
   try {
     new HLSDownloader({
       playlistURL: m3u8_url,
+      playlistFile: m3u8_file,
       destination: tmp_path
     }).startGetM3u8List((err, msg) => {
       if (err) {
@@ -311,18 +319,20 @@ function downloadM3U8(pathname, params, response) {
         console.info("M3u8DownSuc", m3u8_url, tmp_path, JSON.stringify(msg));
         _log.WriteLog("M3u8DownSuc", m3u8_url, tmp_path, JSON.stringify(msg));
       }
-      path.existsSync(tmp_path) && mkdirs(tmp_path);
-      setTimeout(function() {
-        // 使用 error 传递所有 ts 列表
+
+      mkdirs(tmp_path);
+
+      msg &&
         msg.errors &&
-          msg.errors.length > 0 &&
-          aria2DownloadUrls(msg.errors, tmp_path, function() {
+        setTimeout(function() {
+          // 使用 error 传递所有 ts 列表
+          aria2DownloadUrls(msg.errors || [], tmp_path, function() {
             sendCallBack(notify_url, {
               fileDir: tmp_path,
               stream_id: stream_id
             });
           });
-      }, 0);
+        }, 0);
     });
   } catch (err) {
     return returnApiError(pathname, params, response, err);
