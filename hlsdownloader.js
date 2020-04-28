@@ -114,6 +114,7 @@ class HLSDownloader {
     this.hostName = parse(playlistURL, true, true).hostname;
     this.items = [];
     this.errors = [];
+    this.map = {};
   }
 
   /**
@@ -286,7 +287,8 @@ class HLSDownloader {
           return callback(null, {
             message: "Download done with some errors",
             playlistURL: this.playlistURL,
-            errors: this.errors
+            errors: this.errors,
+            map: this.map
           });
         }
 
@@ -404,16 +406,17 @@ class HLSDownloader {
    * @param {string} playlistContent
    */
   parseVariantPlaylist(playlistContent) {
-    const replacedPlaylistContent = playlistContent.replace(
-      /^#[\s\S].*/gim,
-      ""
-    );
-    const items = replacedPlaylistContent
-      .split("\n")
-      .filter(item => item !== "")
-      .map(item => resolve(this.playlistURL, item));
-
-    this.items = this.items.concat(items);
+    const items = playlistContent.split("\n");
+    var last = "";
+    for (const item of items) {
+      const fix = item.replace(/^#[\s\S].*/gim, "");
+      if (fix !== "") {
+        var url = resolve(this.playlistURL, fix);
+        this.items.push(url);
+        this.map[url] = last;
+      }
+      last = item;
+    }
   }
 
   /**
