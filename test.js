@@ -9,6 +9,7 @@ var doneMap = {};
 var tsMap = {};
 var tsSeq = [];
 var playTime = 0;
+var errorNum = 0;
 var startTime = new Date().valueOf();
 var isDownload = false;
 
@@ -19,6 +20,10 @@ function playTs() {
   if (now - startTime < playTime) {
     return;
   }
+  var errorSkip = errorNum * 5 < 60 ? errorNum * 5 : 60;
+  if (errorNum > 0 && parseInt(now / 1000) % errorSkip != 0) {
+    return;
+  }
 
   if (!isDownload && tsSeq.length <= 3) {
     console.log("dumpM3U8", playTime / 1000);
@@ -26,15 +31,20 @@ function playTs() {
   }
   var ts = tsSeq.shift();
   if (!ts || ts in doneMap || !(ts in tsMap)) {
-    console.log("skip", playTime / 1000);
+    console.log("skip", errorNum, playTime / 1000);
+    errorNum += 1;
     return;
   }
+  errorNum = 0;
   var t = tsMap[ts];
   playTime += t * 1000;
   console.log("playTs", ts, t, playTime / 1000);
 }
 
 function appendTs(err, msg) {
+  if (err) {
+    return;
+  }
   var map = msg.map || {};
   var ts = msg.errors || [];
   ts = ts.slice(1);
@@ -51,6 +61,7 @@ function appendTs(err, msg) {
       }
     }
   }
+  isDownload = false;
 }
 
 function dumpM3U8(m3u8_url, m3u8_file, tmp_path, callback) {
