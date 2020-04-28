@@ -10,41 +10,63 @@ var tsMap = {};
 var tsSeq = [];
 var playTime = 0;
 var errorNum = 0;
-var startTime = new Date().valueOf();
 var isDownload = false;
 
 setInterval(playTs, 100);
 
 function playTs() {
   var now = new Date().valueOf();
-  if (now - startTime < playTime) {
+
+  if (
+    typeof tsSeq[0] != "undefined" &&
+    tsSeq[0] in tsMap &&
+    tsMap[tsSeq[0]].at > now
+  ) {
     return;
   }
-  var errorSkip = errorNum * 5 < 60 ? errorNum * 5 : 60;
+
+  var errorSkip = errorNum * 5 < 60 && errorNum * 5 > 0 ? errorNum * 5 : 60;
   if (errorNum > 0 && parseInt(now / 1000) % errorSkip != 0) {
     return;
   }
 
   if (!isDownload && tsSeq.length <= 3) {
-    console.log("dumpM3U8", playTime / 1000);
-    dumpM3U8(m3u8_url, m3u8_file, tmp_path, appendTs);
+    console.log(formatDateStr(), " [info] dumpM3U8", playTime / 1000);
+    isDownload = true;
+    dumpM3U8(m3u8_url, m3u8_file, tmp_path, function(err, msg) {
+      if (err) {
+        errorNum += 1;
+      }
+      appendTs(err, msg);
+      isDownload = false;
+    });
   }
+
+  if (
+    typeof tsSeq[0] != "undefined" &&
+    tsSeq[0] in tsMap &&
+    tsMap[tsSeq[0]].at > now
+  ) {
+    return;
+  }
+
   var ts = tsSeq.shift();
   if (!ts || ts in doneMap || !(ts in tsMap)) {
-    console.log("skip", errorNum, playTime / 1000);
-    errorNum += 1;
     return;
   }
   errorNum = 0;
-  var t = tsMap[ts];
+  var t = tsMap[ts].t;
   playTime += t * 1000;
-  console.log("playTs", ts, t, playTime / 1000);
+  doneMap[ts] = now;
+  console.log(formatDateStr(), " [info] playTs", ts, t, playTime / 1000);
 }
 
 function appendTs(err, msg) {
   if (err) {
     return;
   }
+  var at = new Date().valueOf();
+
   var map = msg.map || {};
   var ts = msg.errors || [];
   ts = ts.slice(1);
@@ -56,16 +78,19 @@ function appendTs(err, msg) {
       var t = parseFloat(tmp[1]);
       if (t > 0) {
         var newTs = !(k in tsMap);
-        tsMap[k] = t;
+        tsMap[k] = {
+          t: t,
+          at: at
+        };
         newTs && tsSeq.push(k);
+
+        at += t * 1000;
       }
     }
   }
-  isDownload = false;
 }
 
 function dumpM3U8(m3u8_url, m3u8_file, tmp_path, callback) {
-  isDownload = true;
   try {
     new HLSDownloader({
       playlistURL: m3u8_url,
@@ -85,7 +110,6 @@ function dumpM3U8(m3u8_url, m3u8_file, tmp_path, callback) {
         // console.info("M3u8DownSuc", msg.map);
         callback && callback(null, msg);
       }
-      isDownload = false;
     });
   } catch (err) {
     console.error(
@@ -96,6 +120,24 @@ function dumpM3U8(m3u8_url, m3u8_file, tmp_path, callback) {
       err
     );
     callback && callback(err);
-    isDownload = false;
   }
+}
+
+function formatDateStr() {
+  var now = new Date(new Date().getTime());
+  var year = now.getFullYear();
+  var month = now.getMonth() + 1;
+  var date = now.getDate();
+  var hour = now.getHours();
+  var minute = now.getMinutes();
+  if (minute < 10) {
+    minute = "0" + minute.toString();
+  }
+  var seconds = now.getSeconds();
+  if (seconds < 10) {
+    seconds = "0" + seconds.toString();
+  }
+  return (
+    year + "-" + month + "-" + date + " " + hour + ":" + minute + ":" + seconds
+  );
 }
