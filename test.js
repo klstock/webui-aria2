@@ -9,7 +9,11 @@ var doneMap = {};
 var tsMap = {};
 var tsSeq = [];
 var playTime = 0;
-var errorNum = 0;
+var errorLast = {
+  num: 0,
+  recovery: new Date().valueOf(),
+  at: new Date().valueOf()
+};
 var isDownload = false;
 
 setInterval(playTs, 100);
@@ -25,20 +29,38 @@ function playTs() {
     return;
   }
 
-  var errorSkip = errorNum * 5 < 60 && errorNum * 5 > 0 ? errorNum * 5 : 60;
-  if (errorNum > 0 && parseInt(now / 1000) % errorSkip != 0) {
-    return;
+  if (errorLast.num > 1) {
+    if (now < errorLast.recovery) {
+      return;
+    } else {
+      console.log(
+        formatDateStr(),
+        " [info] recovery, error at",
+        formatDateStr(errorLast.at),
+        ", num:",
+        errorLast.num,
+        ", wt:",
+        errorLast.wt.toFixed(3)
+      );
+    }
   }
 
   if (!isDownload && tsSeq.length <= 3) {
     console.log(formatDateStr(), " [info] dumpM3U8", playTime / 1000);
     isDownload = true;
     dumpM3U8(m3u8_url, m3u8_file, tmp_path, function(err, msg) {
-      if (err) {
-        errorNum += 1;
-      }
-      appendTs(err, msg);
       isDownload = false;
+      if (err) {
+        var at = new Date().valueOf();
+        errorLast.num += 1;
+        var wt =
+          errorLast.num + errorLast.num * 5 < 60 ? errorLast.num * 5 : 60;
+        errorLast.at = at;
+        errorLast.wt = Math.random() * wt;
+        errorLast.recovery = at + errorLast.wt * 1000;
+      } else {
+        appendTs(err, msg);
+      }
     });
   }
 
@@ -54,7 +76,7 @@ function playTs() {
   if (!ts || ts in doneMap || !(ts in tsMap)) {
     return;
   }
-  errorNum = 0;
+  errorLast.num = 0;
   var t = tsMap[ts].t;
   playTime += t * 1000;
   doneMap[ts] = now;
@@ -123,8 +145,9 @@ function dumpM3U8(m3u8_url, m3u8_file, tmp_path, callback) {
   }
 }
 
-function formatDateStr() {
-  var now = new Date(new Date().getTime());
+function formatDateStr(_now) {
+  _now = _now || new Date().getTime();
+  var now = new Date(_now);
   var year = now.getFullYear();
   var month = now.getMonth() + 1;
   var date = now.getDate();
