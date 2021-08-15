@@ -120,7 +120,7 @@ function sendCallBack(url, params, idx) {
 }
 
 function returnApiSuccess(pathname, params, response, msg, data) {
-  msg = msg || "success";
+  msg = msg || "ok";
   data = data || {};
   if (!response) {
     console.info(
@@ -138,7 +138,7 @@ function returnApiSuccess(pathname, params, response, msg, data) {
   response.write(
     JSON.stringify({
       code: 0,
-      msg: "success",
+      msg: msg,
       data: data
     })
   );
