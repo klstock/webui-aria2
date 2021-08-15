@@ -10,6 +10,8 @@ const PromisePool = require("es6-promise-pool");
 
 const filelog = require("./filelog");
 
+const puppeteer_engine = require("./puppeteer_engine");
+
 const pathJoin = path.join;
 
 function exists(path) {
@@ -75,7 +77,7 @@ function sendCallBack(url, params, idx) {
     form: params
   };
 
-  request.post(options, function(error, resp, body) {
+  request.post(options, function (error, resp, body) {
     if (error || resp.statusCode != 200) {
       config.debug &&
         console.log(
@@ -91,7 +93,7 @@ function sendCallBack(url, params, idx) {
         error ? error.name + ": " + error.message : resp.statusCode
       );
       idx < 10 &&
-        setTimeout(function() {
+        setTimeout(function () {
           sendCallBack(url, params, idx + 1);
         }, 60 * 1000);
     } else {
@@ -193,7 +195,7 @@ function aria2DownloadUrls(urls, tmp_path, success) {
 
   _log.WriteLog("aria2DownloadUrls", JSON.stringify(urls));
 
-  var delayValue = function(url) {
+  var delayValue = function (url) {
     var timer = null;
     return new Promise((resolve, reject) => {
       var arr = url.split("?")[0].split("/");
@@ -221,10 +223,10 @@ function aria2DownloadUrls(urls, tmp_path, success) {
           config.debug && console.log("aria2 addUri", guid, url, tmp_path);
           _log.WriteLog("aria2DownloadUrls addUri", url, guid);
 
-          timer = setInterval(function() {
+          timer = setInterval(function () {
             aria2
               .call("tellStatus", guid)
-              .then(function(obj) {
+              .then(function (obj) {
                 if (obj.status == "complete") {
                   config.debug &&
                     console.log("aria2 complete", guid, url, tmp_path);
@@ -255,7 +257,7 @@ function aria2DownloadUrls(urls, tmp_path, success) {
     });
   };
 
-  var promiseProducer = function() {
+  var promiseProducer = function () {
     while (urls_.length) {
       var url = urls_.pop();
       if (url) {
@@ -267,7 +269,7 @@ function aria2DownloadUrls(urls, tmp_path, success) {
 
   var pool = new PromisePool(promiseProducer, 10);
 
-  pool.addEventListener("rejected", function(event) {
+  pool.addEventListener("rejected", function (event) {
     // The event contains:
     // - target:    the PromisePool itself
     // - data:
@@ -280,7 +282,7 @@ function aria2DownloadUrls(urls, tmp_path, success) {
     );
   });
 
-  pool.start().then(function() {
+  pool.start().then(function () {
     console.info("aria2DownloadUrls success", urls.length);
     _log.WriteLog("aria2DownloadUrls success", JSON.stringify(urls));
     typeof success == "function" && success(urls);
@@ -324,9 +326,9 @@ function downloadM3U8(pathname, params, response) {
 
       msg &&
         msg.errors &&
-        setTimeout(function() {
+        setTimeout(function () {
           // 使用 error 传递所有 ts 列表
-          aria2DownloadUrls(msg.errors || [], tmp_path, function() {
+          aria2DownloadUrls(msg.errors || [], tmp_path, function () {
             sendCallBack(notify_url, {
               fileDir: tmp_path,
               stream_id: stream_id
@@ -361,7 +363,7 @@ function downloadMp4(pathname, params, response) {
   return returnApiSuccess(pathname, params, response, "add success");
 }
 
-var app = http.createServer(function(request, response) {
+var app = http.createServer(function (request, response) {
   var req = url.parse(request.url),
     pathname = req.pathname,
     filename = path.join(process.cwd(), "docs", pathname),
@@ -382,6 +384,16 @@ var app = http.createServer(function(request, response) {
     return;
   }
 
+  var pre = "/puppet/";
+  if (pathname.substr(0, pre.length) == "/puppet/") {
+    puppeteer_engine.process_api(pathname.substr(pre.length), params, (data, msg) => {
+      returnApiSuccess(pathname, params, response, msg, data)
+    }, err => {
+      returnApiError(pathname, params, response, err)
+    });
+    return;
+  }
+
   var extname = path.extname(filename);
   var contentType = "text/html";
   switch (extname) {
@@ -399,7 +411,7 @@ var app = http.createServer(function(request, response) {
       break;
   }
 
-  fs.exists(filename, function(exists) {
+  fs.exists(filename, function (exists) {
     if (!exists) {
       response.writeHead(404, {
         "Content-Type": "text/plain"
@@ -411,7 +423,7 @@ var app = http.createServer(function(request, response) {
 
     if (fs.statSync(filename).isDirectory()) filename += "/index.html";
 
-    fs.readFile(filename, "binary", function(err, file) {
+    fs.readFile(filename, "binary", function (err, file) {
       if (err) {
         response.writeHead(500, {
           "Content-Type": "text/plain"

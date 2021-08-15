@@ -28,6 +28,7 @@
     "es6-promise-pool": "^2.5.0",
     "lodash": "^4.17.10",
     "mkdirp": "^1.0.4",
+    "puppeteer": "^10.2.0",
     "request": "^2.88.0",
     "request-promise": "^4.2.6"
   },
