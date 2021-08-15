@@ -5,7 +5,7 @@ var s_bashDir = null;
 if (!path.sep) {
   path.sep = "/";
 }
-exports.NewLog = function() {
+exports.NewLog = function () {
   var arr = [];
   for (var i in arguments) {
     var str = String(arguments[i]);
@@ -17,7 +17,7 @@ exports.NewLog = function() {
   }
   return new FileLogger(arr);
 };
-exports.SetLogDir = function() {
+exports.SetLogDir = function () {
   if (s_bashDir) return;
   s_bashDir = path.join(process.cwd(), "log", GetDay());
   _mkdirSync(s_bashDir);
@@ -60,7 +60,7 @@ function _createDir(dirArr) {
 function _mkdirSync(filename) {
   try {
     fs.mkdirSync(filename, 0777);
-  } catch (err) {}
+  } catch (err) { }
 }
 
 function _getFileName(id) {
@@ -83,20 +83,20 @@ function FileLogger(arr) {
   this._makeFilePath();
 }
 
-FileLogger.prototype._makeFilePath = function() {
+FileLogger.prototype._makeFilePath = function () {
   this._checkPath();
   var name = _getFileName(this.file_name_id_++);
   this.file_name_ = this.dir_path_ + path.sep + name;
 };
 
-FileLogger.prototype._checkPath = function() {
+FileLogger.prototype._checkPath = function () {
   _getRootDir();
   if (!fs.existsSync(this.dir_path_)) {
     _mkdirSync(this.dir_path_);
   }
 };
 
-FileLogger.prototype.open = function() {
+FileLogger.prototype.open = function () {
   try {
     this._checkPath();
     this.file_fd_ = fs.openSync(this.file_name_, "a+");
@@ -109,7 +109,7 @@ FileLogger.prototype.open = function() {
   }
 };
 
-FileLogger.prototype.OnTimer = function(df) {
+FileLogger.prototype.OnTimer = function (df) {
   this.num_write_per_second_ = 0;
   if (this.file_state_ == STATE_OPEN) {
     this.lastWrite += df;
@@ -119,7 +119,7 @@ FileLogger.prototype.OnTimer = function(df) {
   }
 };
 
-FileLogger.prototype._closeFile = function() {
+FileLogger.prototype._closeFile = function () {
   try {
     if (this.file_state_ == STATE_OPEN) {
       fs.closeSync(this.file_fd_);
@@ -131,7 +131,7 @@ FileLogger.prototype._closeFile = function() {
   }
 };
 
-FileLogger.prototype.Println = function(pre, args) {
+FileLogger.prototype.Println = function (pre, args) {
   var arr = [];
   arr.push(GetTimeStr() + "(pid:" + process.pid + ")  [" + pre + "]  ");
   for (var i in args) {
@@ -140,7 +140,7 @@ FileLogger.prototype.Println = function(pre, args) {
   this.write.apply(this, arr);
 };
 
-FileLogger.prototype.write = function() {
+FileLogger.prototype.write = function () {
   if (this.file_state_ != STATE_OPEN) this.open();
   if (!this.file_fd_) return;
   if (this.num_write_per_second_++ > 200) {
@@ -149,7 +149,7 @@ FileLogger.prototype.write = function() {
   berror = false;
   while (true) {
     try {
-      fs.write(this.file_fd_, _getString(arguments), function(err) {
+      fs.write(this.file_fd_, _getString(arguments), function (err) {
         err && console.log("log write file fail:", err, err.stack);
       });
       break;
@@ -168,12 +168,12 @@ FileLogger.prototype.write = function() {
   }
 };
 
-FileLogger.prototype.Destroy = function() {
+FileLogger.prototype.Destroy = function () {
   this._closeFile();
   clearInterval(this.timer_);
 };
 
-FileLogger.prototype.WriteLog = function() {
+FileLogger.prototype.WriteLog = function () {
   try {
     this.Println("Log", arguments);
   } catch (err) {
@@ -215,14 +215,15 @@ function GetTimeStr(date) {
     "." +
     TimeTo(time.getSeconds()) +
     "." +
-    TimeTo(time.getMilliseconds());
+    TimeTo(time.getMilliseconds(), 3);
   return timStr;
 }
 
-function TimeTo(str) {
+function TimeTo(str, width) {
+  width = width || 2
   str = String(str);
-  if (str.length == 1) {
-    return "0" + str;
+  while (str.length < width) {
+    str = '0' + str;
   }
   return str;
 }
