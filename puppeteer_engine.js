@@ -1,12 +1,13 @@
 const puppeteer = require('puppeteer');
 
-const webSocketDebuggerUrl = 'c7716353-b647-455e-a8c5-0db592669f81';
+const wsDebuggerHash = 'c91c2cc0-3373-4307-b8d0-f8148422d87a';
+const wsDebuggerEndpoint = 'http://localhost:9222/json/version'
 
 let browser = null;
 (async () => {
-    if (typeof webSocketDebuggerUrl == 'string' && webSocketDebuggerUrl) {
+    if (typeof wsDebuggerHash == 'string' && wsDebuggerHash) {
         browser = await puppeteer.connect({
-            browserWSEndpoint: 'ws://localhost:9222/devtools/browser/' + webSocketDebuggerUrl
+            browserWSEndpoint: 'ws://localhost:9222/devtools/browser/' + wsDebuggerHash
         });
     } else {
         browser = await puppeteer.launch();
@@ -17,7 +18,7 @@ process.stdin.resume(); //so the program will not close instantly
 
 async function exitHandler(options, exitCode) {
     if (browser) {
-        if (typeof webSocketDebuggerUrl == 'string' && webSocketDebuggerUrl) {
+        if (typeof wsDebuggerHash == 'string' && wsDebuggerHash) {
             // pass
         } else {
             await browser.close();
