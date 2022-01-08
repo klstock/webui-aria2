@@ -1,13 +1,25 @@
 const puppeteer = require('puppeteer');
 
-const wsDebuggerHash = 'c91c2cc0-3373-4307-b8d0-f8148422d87a';
-const wsDebuggerEndpoint = 'http://localhost:9222/json/version'
+const wsDebuggerHash = '5e71a36e-24bd-4cc9-b1d8-799ee85b0d56';
 
 let browser = null;
 (async () => {
-    if (typeof wsDebuggerHash == 'string' && wsDebuggerHash) {
+    let webSocketDebuggerUrl = '';
+
+    let envWsUrl = process.env.WEBSOCKET_DEBUGGER_URL || '';
+    if (!webSocketDebuggerUrl && typeof envWsUrl == 'string' && envWsUrl) {
+        webSocketDebuggerUrl = envWsUrl;
+    }
+
+    if (!webSocketDebuggerUrl && typeof wsDebuggerHash == 'string' && wsDebuggerHash) {
+        webSocketDebuggerUrl = 'ws://localhost:9222/devtools/browser/' + wsDebuggerHash
+    }
+
+    if (webSocketDebuggerUrl) {
         browser = await puppeteer.connect({
-            browserWSEndpoint: 'ws://localhost:9222/devtools/browser/' + wsDebuggerHash
+            browserWSEndpoint: webSocketDebuggerUrl,
+            defaultViewport: null,
+            ignoreHTTPSErrors: true
         });
     } else {
         browser = await puppeteer.launch();
@@ -75,7 +87,7 @@ const api_map = {
         })
     },
     browser_get_html: async (params, success, error) => {
-        let url = params.url || 'http://localhost:6891/'
+        let url = params.url || 'http://localhost:9222/json/version'
         const page = await browser.newPage();
         await page.goto(url, { waitUntil: 'networkidle0' });
 
