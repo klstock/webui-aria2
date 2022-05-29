@@ -119,6 +119,58 @@ function sendCallBack(url, params, idx) {
   });
 }
 
+function returnHtmlSuccess(pathname, params, response, code, data) {
+  code = code || 200;
+  data = data || "OK";
+  if (!response) {
+    console.info(
+      "HtmlSuccess",
+      pathname,
+      JSON.stringify(params),
+      `content len: ${data.length}`
+    );
+    return;
+  }
+
+  response.writeHead(code, {
+    "Content-Type": "text/html;charset=utf-8"
+  });
+  response.write(data);
+  _log.WriteLog(
+    "HtmlSuccess",
+    pathname,
+    JSON.stringify(params),
+    `content len: ${data.length}`
+  );
+  return response.end();
+}
+
+function returnHtmlError(pathname, params, response, err) {
+  if (!response) {
+    console.error(
+      "HtmlError",
+      pathname,
+      JSON.stringify(params),
+      err.name || 'error',
+      err.message
+    );
+    return;
+  }
+
+  response.writeHead(500, {
+    "Content-Type": "text/html;charset=utf-8"
+  });
+  response.write(`<h2>Error: ${err.message}</h2>`);
+  _log.WriteLog(
+    "HtmlError",
+    pathname,
+    JSON.stringify(params),
+    err.name || 'error',
+    err.message
+  );
+  return response.end();
+}
+
 function returnApiSuccess(pathname, params, response, msg, data) {
   msg = msg || "ok";
   data = data || {};
@@ -385,11 +437,21 @@ var app = http.createServer(function (request, response) {
   }
 
   var pre = "/puppet/";
-  if (pathname.substr(0, pre.length) == "/puppet/") {
+  if (pathname.substr(0, pre.length) == pre) {
     puppeteer_engine.process_api(pathname.substr(pre.length), params, (data, msg) => {
       returnApiSuccess(pathname, params, response, msg, data)
     }, err => {
       returnApiError(pathname, params, response, err)
+    });
+    return;
+  }
+
+  pre = "/phtml/";
+  if (pathname.substr(0, pre.length) == pre) {
+    puppeteer_engine.process_api(pathname.substr(pre.length), params, (data, code) => {
+      returnHtmlSuccess(pathname, params, response, code, data)
+    }, err => {
+      returnHtmlError(pathname, params, response, err)
     });
     return;
   }
