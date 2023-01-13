@@ -79,7 +79,7 @@ const process_api = (api, params, success, error) => {
 
 async function mock_page(mock, url, html) {
     const page = await browser.newPage();
-    if(!mock) {
+    if (!mock) {
         return page;
     }
     await page.setRequestInterception(true);
@@ -111,7 +111,7 @@ function render_html(codes, slug) {
     <meta name="description" content="" />
     </head>
     <body>`;
-    
+
     if (codes.length > 0 && slug) {
         html += '<ul>'
         for (const code of codes) {
@@ -130,6 +130,7 @@ function render_html(codes, slug) {
     return html;
 }
 
+var _base_action_page = null;
 
 const api_map = {
     hello: (params, success, error) => {
@@ -141,6 +142,62 @@ const api_map = {
         success({
             sum: parseInt(params.a || 1) + parseInt(params.b || 2)
         })
+    },
+    browser_action_init: async (params, success, error) => {
+        let url = params.url || 'http://localhost:9222/json/version';
+        let keyword = params.keyword || 'keyword';
+        let id_input = params.id_input || 'id_input';
+        let id_search = params.id_search || 'id_search';
+
+        if (_base_action_page) {
+            return success({
+                url,
+            })
+        }
+        const page = await browser.newPage();
+        await page.goto(url, { waitUntil: 'domcontentloaded' });
+
+        const _input = await page.$(id_input);
+        const _search = await page.$(id_search);
+        await _input.focus()
+        await _input.type(keyword, { delay: 100 });
+        await _input.press('Enter');
+
+        _base_action_page = page;
+
+        success({
+            url,
+        })
+    },
+    browser_action_html: async (params, success, error) => {
+        let action = params.action || 'check';
+        let url = _base_action_page ? _base_action_page.url() : 'blank:';
+        var _bpage = _base_action_page;
+        var ret = {};
+        if (action != 'check' && !_bpage) {
+            return error(new Error(`base_action_page not found, init first`))
+        }
+
+        if (action == 'getPage') {
+            let pn = params.page || '1';
+            let id_page = params.id_page || 'id_page';
+            let pre_code = params.pre_code || '1+1';
+            if (parseInt(pn) > 1) {
+                await _bpage.evaluate(pre_code);
+            }
+            await _bpage.waitFor(2000);
+            await _bpage.waitFor(id_page);
+
+            const _page_txt = await _bpage.$eval(id_page, el => el.textContent);
+            console.log(`action getPage ${pn} _page_txt: ${_page_txt} pre_code: ${pre_code}`)
+            if (_page_txt.trim() == pn) {
+                ret.page = pn;
+                ret.html = await _bpage.content();
+            }
+        }
+        success(Object.assign(ret, {
+            action, url
+        }))
     },
     browser_get_html: async (params, success, error) => {
         let url = params.url || 'http://localhost:9222/json/version'
@@ -178,7 +235,7 @@ const api_map = {
 
         success(ret)
     },
-    
+
 
     html_tpl: async (params, success, error) => {
         let codes = (params.codes || '').split(',').filter(i => i)
