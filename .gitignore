@@ -4,3 +4,10 @@
 debug.log
 stats.json
 node_modules
+
+/config.js
+
+.vscode/
+uget.7z
+
+uget/

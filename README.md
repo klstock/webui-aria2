@@ -19,7 +19,7 @@ Then to use the WebUI-Aria2,
 - Or you can also use NodeJS to create simple server by using the following command from the project folder.
 
 ```bash
-node node-server.js
+node dwn-server.js
 ```
 
 # Tips
