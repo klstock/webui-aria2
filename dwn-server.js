@@ -198,7 +198,7 @@ function returnApiSuccess(pathname, params, response, msg, data) {
     "ApiSuccess",
     pathname,
     JSON.stringify(params),
-    JSON.stringify(data)
+    // JSON.stringify(data)
   );
   return response.end();
 }

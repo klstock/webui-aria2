@@ -201,21 +201,26 @@ function GetTimeStr(date) {
   } else if (date instanceof Number) {
     time = new Date(date);
   }
-
+  var mon = time.getMonth() + 1;
+  var day = time.getDate();
+  var h = time.getHours();
+  var m = time.getMinutes();
+  var s = time.getSeconds();
+  var ms = time.getMilliseconds();
   var timStr =
     time.getFullYear() +
     "-" +
-    TimeTo(time.getMonth() + 1) +
+    (mon > 9 ? mon : ('0' + mon)) +
     "-" +
-    TimeTo(time.getDate()) +
-    "-" +
-    TimeTo(time.getHours()) +
+    (day > 9 ? day : ('0' + day)) +
+    " " +
+    (h > 9 ? h : ('0' + h)) +
+    ":" +
+    (m > 9 ? m : ('0' + m)) +
+    ":" +
+    (s > 9 ? s : ('0' + s)) +
     "." +
-    TimeTo(time.getMinutes()) +
-    "." +
-    TimeTo(time.getSeconds()) +
-    "." +
-    TimeTo(time.getMilliseconds(), 3);
+    (ms > 99 ? ms : (ms > 9 ? ('0' + ms) : ('00' + ms)));
   return timStr;
 }
 
