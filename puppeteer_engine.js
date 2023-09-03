@@ -203,15 +203,19 @@ const api_map = {
         let url = params.url || 'http://localhost:9222/json/version'
         const page = await browser.newPage();
 
+        page.goto(url, { waitUntil: 'networkidle0' }).then(async () => {
+          await page.goto(url, { waitUntil: 'networkidle0' });
 
-        await page.goto(url, { waitUntil: 'networkidle0' });
+          let html = await page.content();
+          await page.close();
 
-        let html = await page.content();
-        await page.close();
-
-        success({
-            html
-        })
+          success({
+              html
+          });
+        }).catch(async (err) => {
+          await page.close();
+          error(err);
+        });
     },
     browser_get_iframe: async (params, success, error) => {
         let codes = (params.codes || '').split(',').filter(i => i)
