@@ -25,7 +25,9 @@ let browser = null;
     } else {
         browser = await puppeteer.launch();
     }
-})();
+})().catch(function(err){
+    console.log('puppeteer.launch Err:', err);
+});
 
 process.stdin.resume(); //so the program will not close instantly
 
