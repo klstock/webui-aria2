@@ -14,6 +14,29 @@ const puppeteer_engine = require("./puppeteer_engine");
 
 const pathJoin = path.join;
 
+
+var _CONFIG = null;
+if (process.argv.length > 2) {
+  _CONFIG = require("./" + process.argv[2]);
+} else {
+  _CONFIG = require("./config");
+}
+
+const config = _CONFIG.configs || {};
+const _log = filelog.NewLog("DownloadSrv");
+
+puppeteer_engine.init(config)
+
+const aria2 = new Aria2Api([
+  {
+    host: config.aria2_host || "localhost",
+    port: config.aria2_port || 6800,
+    secure: config.aria2_secure || false,
+    secret: config.aria2_secret || "",
+    path: config.aria2_path || "/jsonrpc"
+  }
+]);
+
 function exists(path) {
   return fs.existsSync(path);
 }
@@ -43,26 +66,6 @@ function mkdirs(tmp_path) {
 
   fs.mkdirSync(tmp_path);
 }
-
-var _CONFIG = null;
-if (process.argv.length > 2) {
-  _CONFIG = require("./" + process.argv[2]);
-} else {
-  _CONFIG = require("./config");
-}
-
-const config = _CONFIG.configs || {};
-const _log = filelog.NewLog("DownloadSrv");
-
-const aria2 = new Aria2Api([
-  {
-    host: config.aria2_host || "localhost",
-    port: config.aria2_port || 6800,
-    secure: config.aria2_secure || false,
-    secret: config.aria2_secret || "",
-    path: config.aria2_path || "/jsonrpc"
-  }
-]);
 
 function checkRequestApiKey(params) {
   var api_key = params.api_key || "";

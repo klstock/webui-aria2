@@ -1,33 +1,44 @@
 const puppeteer = require('puppeteer');
 
-const wsDebuggerHash = 'b3b78ae1-2672-4a13-aa73-b87d30cc4472';
 
 let browser = null;
-(async () => {
-    let webSocketDebuggerUrl = '';
+exports.init = function(cfg) {
+    const wsDebuggerHash = cfg.wsDebuggerHash || 'b3b78ae1-2672-4a13-aa73-b87d30cc4472';
+    const wsDebuggerHost = cfg.wsDebuggerHost || '127.0.0.1:9223';
 
-    let envWsUrl = process.env.WEBSOCKET_DEBUGGER_URL || '';
-    if (!webSocketDebuggerUrl && typeof envWsUrl == 'string' && envWsUrl) {
-        webSocketDebuggerUrl = envWsUrl;
-    }
+    (async () => {
+        let webSocketDebuggerUrl = '';
 
-    if (!webSocketDebuggerUrl && typeof wsDebuggerHash == 'string' && wsDebuggerHash) {
-        webSocketDebuggerUrl = 'ws://127.0.0.1:9223/devtools/browser/' + wsDebuggerHash
-    }
+        let envWsUrl = process.env.WEBSOCKET_DEBUGGER_URL || '';
+        if (!webSocketDebuggerUrl && typeof envWsUrl == 'string' && envWsUrl) {
+            webSocketDebuggerUrl = envWsUrl;
+        }
 
-    if (webSocketDebuggerUrl) {
-        console.log('use webSocketDebuggerUrl', webSocketDebuggerUrl)
-        browser = await puppeteer.connect({
-            browserWSEndpoint: webSocketDebuggerUrl,
-            defaultViewport: null,
-            ignoreHTTPSErrors: true
-        });
-    } else {
-        browser = await puppeteer.launch();
-    }
-})().catch(function(err){
-    console.log('puppeteer.launch Err:', err);
-});
+        if (!webSocketDebuggerUrl && typeof wsDebuggerHash == 'string' && wsDebuggerHash) {
+            webSocketDebuggerUrl = 'ws://' + wsDebuggerHost + '/devtools/browser/' + wsDebuggerHash
+        }
+
+        if (webSocketDebuggerUrl) {
+            console.log('use webSocketDebuggerUrl', webSocketDebuggerUrl)
+            browser = await puppeteer.connect({
+                browserWSEndpoint: webSocketDebuggerUrl,
+                defaultViewport: null,
+                ignoreHTTPSErrors: true
+            });
+        } else {
+            browser = await puppeteer.launch({
+                headless: true, // 可选：无头模式
+                args: [
+                    '--disable-gpu', // 禁用 GPU 加速
+                    '--no-sandbox',  // 可选：禁用沙箱（适用于 Linux 环境）
+                    '--disable-dev-shm-usage' // 可选：防止内存不足问题
+                ]
+            });
+        }
+    })().catch(function(err){
+        console.log('puppeteer.launch Err:', err);
+    });
+}
 
 process.stdin.resume(); //so the program will not close instantly
 
