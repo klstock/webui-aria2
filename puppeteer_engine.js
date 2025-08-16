@@ -12,7 +12,7 @@ let browser = null;
     }
 
     if (!webSocketDebuggerUrl && typeof wsDebuggerHash == 'string' && wsDebuggerHash) {
-        webSocketDebuggerUrl = 'ws://localhost:9223/devtools/browser/' + wsDebuggerHash
+        webSocketDebuggerUrl = 'ws://127.0.0.1:9223/devtools/browser/' + wsDebuggerHash
     }
 
     if (webSocketDebuggerUrl) {
