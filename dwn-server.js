@@ -135,6 +135,7 @@ function returnHtmlSuccess(pathname, params, response, code, data) {
   response.writeHead(code, {
     "Content-Type": "text/html;charset=utf-8"
   });
+  data = typeof data == 'string' ? data : JSON.stringify(data);
   response.write(data);
   _log.WriteLog(
     "HtmlSuccess",
