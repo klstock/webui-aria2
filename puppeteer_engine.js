@@ -1,6 +1,6 @@
 const puppeteer = require('puppeteer');
 
-const wsDebuggerHash = '6355a160-1f4b-4588-ad5b-d35944288459';
+const wsDebuggerHash = 'b3b78ae1-2672-4a13-aa73-b87d30cc4472';
 
 let browser = null;
 (async () => {
@@ -12,7 +12,7 @@ let browser = null;
     }
 
     if (!webSocketDebuggerUrl && typeof wsDebuggerHash == 'string' && wsDebuggerHash) {
-        webSocketDebuggerUrl = 'ws://localhost:9222/devtools/browser/' + wsDebuggerHash
+        webSocketDebuggerUrl = 'ws://localhost:9223/devtools/browser/' + wsDebuggerHash
     }
 
     if (webSocketDebuggerUrl) {
