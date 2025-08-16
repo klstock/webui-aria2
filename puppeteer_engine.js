@@ -3,7 +3,7 @@ const puppeteer = require('puppeteer');
 
 let browser = null;
 exports.init = function(cfg) {
-    const wsDebuggerHash = cfg.wsDebuggerHash || 'b3b78ae1-2672-4a13-aa73-b87d30cc4472';
+    const wsDebuggerHash = cfg.wsDebuggerHash || '';
     const wsDebuggerHost = cfg.wsDebuggerHost || '127.0.0.1:9223';
 
     (async () => {
