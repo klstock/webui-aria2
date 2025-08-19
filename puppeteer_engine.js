@@ -27,13 +27,42 @@ exports.init = function(cfg) {
             });
         } else {
             browser = await puppeteer.launch({
-                headless: true, // 可选：无头模式
-                args: [
-                    '--disable-gpu', // 禁用 GPU 加速
-                    '--no-sandbox',  // 可选：禁用沙箱（适用于 Linux 环境）
-                    '--disable-dev-shm-usage' // 可选：防止内存不足问题
-                ]
-            });
+              headless: 'new',  // 使用新版 Headless 模式（资源占用更低）
+              args: [
+                // 核心资源节省参数
+                '--single-process',         // 单进程模式
+                '--no-zygote',              // 禁止派生进程
+                '--in-process-gpu',         // GPU 在进程内运行
+                
+                // 内存/CPU 优化
+                '--disable-dev-shm-usage',  // 避免 /dev/shm 内存不足
+                '--memory-pressure-off',    // 禁用内存压力处理
+                '--disable-background-timer-throttling', // 禁止后台节流
+                
+                // 功能禁用
+                '--disable-gpu',            // 禁用 GPU 加速
+                '--disable-software-rasterizer', // 禁用软件光栅化
+                '--disable-extensions',     // 禁用扩展
+                '--disable-default-apps',   // 禁用默认应用
+                '--mute-audio',             // 静音
+                '--no-sandbox',             // 禁用沙箱（容器内安全时使用）
+                '--disable-setuid-sandbox',
+                
+                // 网络优化
+                '--disable-translate',      // 禁用翻译
+                '--disable-sync',           // 禁用同步功能
+                
+                // 渲染优化
+                '--disable-canvas-aa',      // 禁用画布抗锯齿
+                '--disable-2d-canvas-clip-aa', // 禁用 2D 画布抗锯齿
+                '--disable-gl-drawing-for-tests' // 禁用 GL 绘制
+              ],
+              env: {
+                NODE_OPTIONS: '--max-old-space-size=256' // 限制 Node 内存
+              },
+              dumpio: false,  // 禁用调试输出
+              ignoreDefaultArgs: true  // 跳过默认参数
+          });
         }
     })().catch(function(err){
         console.log('puppeteer.launch Err:', err);
