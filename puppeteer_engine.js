@@ -4,7 +4,7 @@ const puppeteer = require('puppeteer');
 let browser = null;
 exports.init = function(cfg) {
     const wsDebuggerHash = cfg.wsDebuggerHash || '';
-    const wsDebuggerHost = cfg.wsDebuggerHost || '127.0.0.1:9223';
+    const wsDebuggerHost = (typeof cfg.wsDebuggerHost == 'string' && cfg.wsDebuggerHost) ? cfg.wsDebuggerHost : '127.0.0.1:9222';
 
     (async () => {
         let webSocketDebuggerUrl = '';
@@ -18,12 +18,21 @@ exports.init = function(cfg) {
             webSocketDebuggerUrl = 'ws://' + wsDebuggerHost + '/devtools/browser/' + wsDebuggerHash
         }
 
-        if (webSocketDebuggerUrl) {
-            console.log('use webSocketDebuggerUrl', webSocketDebuggerUrl)
+        webSocketDebuggerUrl = webSocketDebuggerUrl ? webSocketDebuggerUrl : ('http://' + wsDebuggerHost)
+        const protocol = webSocketDebuggerUrl.split('://')[0] + ':';
+        if (protocol == 'ws:') {
+            console.log('use browserWSEndpoint', webSocketDebuggerUrl)
             browser = await puppeteer.connect({
                 browserWSEndpoint: webSocketDebuggerUrl,
                 defaultViewport: null,
                 ignoreHTTPSErrors: true
+            });
+        } else if (protocol == 'http:') {
+            console.log('use browserURL', webSocketDebuggerUrl)
+            browser = await puppeteer.connect({
+              browserURL: webSocketDebuggerUrl,
+              defaultViewport: null,
+              ignoreHTTPSErrors: true
             });
         } else {
             browser = await puppeteer.launch({
