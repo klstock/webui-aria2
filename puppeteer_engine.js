@@ -66,6 +66,7 @@ exports.init = function(cfg) {
         }
     })().catch(function(err){
         console.log('puppeteer.launch Err:', err);
+        process.exit(1);
     });
 }
 
